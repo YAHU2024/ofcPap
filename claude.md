@@ -77,3 +77,39 @@
 3. **代码稳健性：** 生成的 Python 脚本必须包含必要的注释和异常处理。
 
 ---
+
+## 8. 项目进度追踪
+
+> 最后更新: 2026-05-13
+
+### 已完成
+
+| 阶段 | 任务 | 状态 | 产物 |
+|------|------|------|------|
+| A. 调研 | 检索 3 篇后2024年轻量化 ANN 光纤非线性补偿论文 | ✅ 完成 | 3 篇核心论文（DOI 已验证） |
+| B1. SSFM 仿真器 | 单信道 16-QAM 光纤传输仿真脚本 | ✅ 完成 | `ssfm_simulator.py` |
+| B2. 数据集构建 | 生成 EDC 补偿信号 + 原始发射符号 | ✅ 完成 | `fiber_dataset.npz` (5 功率级别) |
+| B2. 验证绘图 | 星座图对比（EDC vs TX） | ✅ 完成 | `initial_test.png`, `power_sweep_overview.png` |
+| 工程化 | Git 管理 + SOP 文档 | ✅ 完成 | `SSFM_SOP.md`, 已推送至 `git@github.com:YAHU2024/ofcPap.git` |
+
+### 待完成
+
+| 阶段 | 任务 | 优先级 |
+|------|------|--------|
+| B3. PyTorch 模型 | 构建轻量 MLP 非线性补偿器并训练 | 🔴 高 |
+| B4. 性能评估 | 导出 BER 曲线、Q-factor 对比 | 🔴 高 |
+| C. 写作排版 | LaTeX 论文撰写与编译 | 🟡 中 |
+
+### 调研阶段产出（3 篇参考论文）
+
+1. **GDP-KAN** (Optics Express, 2025) — 基于 Kolmogorov-Arnold 网络的非线性补偿器
+2. **Operator Learning** (Journal of Lightwave Technology, 2025) — 算子学习框架用于光纤信道建模
+3. **MT-NN 简化版** (Optics Express, 2025) — 复杂度感知的轻量 MLP 非线性补偿器（**本项目复现对象**）
+
+### 关键仿真结果摘要
+
+- EVM U 型曲线: -4 dBm: 0.167 → -2 dBm: 0.153 (最优) → 0 dBm: 0.171 → +2 dBm: 0.232 → +4 dBm: 0.349
+- 相位误差单调递增 (0.057 → 0.336 rad)，确认 SPM 非线性相位噪声主导高功率区域
+- 数据集结构: `{X_<power>: EDC 输出符号, Y_<power>: 原始发射符号}` × 5 功率级别
+
+---
