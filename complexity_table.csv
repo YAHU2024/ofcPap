@@ -1,0 +1,14 @@
+Metric,Value
+model_parameters,3346
+real_mults_per_symbol,3232
+dbp_standard_ops_per_symbol,3440000
+dbp_reduced_ops_per_symbol,68800
+inference_ns_per_symbol,85.61
+inference_ms_per_batch_10k,0.856
+
+Complexity comparison
+MLP real mults/symbol,3232
+Standard DBP (500 steps/span),3440000
+Reduced DBP (10 steps/span),68800
+Complexity ratio MLP/Standard-DBP,0.000940
+Complexity ratio MLP/Reduced-DBP,0.0470

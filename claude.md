@@ -110,12 +110,12 @@
 | B3. MLP 补偿器 | 轻量 MLP 非线性补偿器训练 | ✅ 完成 | `train_mlp_nlc.py`, `mlp_nlc_model.pt` |
 | B3. 结果评估 | EVM / Q-factor / BER / 星座图 | ✅ 完成 | `mlp_results.csv`, 6 张评估图 |
 | 工程化 | Git 管理 + SOP 文档 | ✅ 完成 | `SSFM_SOP.md`, 已推送至 `git@github.com:YAHU2024/ofcPap.git` |
+| B4. 性能评估 | BER 曲线、Q-factor 对比、复杂度分析 | ✅ 完成 | `eval_performance_b4.py`, `b4_summary.csv`, 4 张评估图 |
 
 ### 待完成
 
 | 阶段 | 任务 | 优先级 |
 |------|------|--------|
-| B4. 性能评估 | 导出 BER 曲线、Q-factor 对比 | 🔴 高 |
 | C. 写作排版 | LaTeX 论文撰写与编译 | 🟡 中 |
 
 ### 调研阶段产出（3 篇参考论文）
@@ -136,5 +136,12 @@
 - EVM 改善: 高功率 (+4 dBm) 从 0.348 → 0.0041 (98.8% 降低)
 - Q-gain 随功率递增，证实 MLP 主要消除确定性非线性损伤（ASE 噪声不可预测）
 - 模型输出: `mlp_nlc_model.pt`, `mlp_results.csv`, 星座图/训练曲线 6 张
+
+**B4 性能评估关键结果:**
+- BER 曲线: EDC baseline 在 +4 dBm 时 BER=1.46×10⁻¹（高于 FEC 阈值），MLP-NLC 降至测量极限以下
+- Q-factor 增益: 8.50 dB (-4 dBm) → 38.56 dB (+4 dBm)，增益随功率单调递增
+- 复杂度: MLP 3,346 参数，3,232 实乘/符号，85.6 ns/符号；仅为标准 DBP 的 ~0.09%
+- 直接比特计数: 低功率 MLP 补偿后仍有残余符号误码（测试集 ~10⁴ 比特限制），高功率归零
+- 产物: `ber_vs_power.png`, `qfactor_comparison.png`, `qgain_vs_power.png`, `evm_cdf_comparison.png`
 
 ---
