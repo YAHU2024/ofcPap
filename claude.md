@@ -107,13 +107,14 @@
 | B1. SSFM 仿真器 | 单信道 16-QAM 光纤传输仿真脚本 | ✅ 完成 | `ssfm_simulator.py` |
 | B2. 数据集构建 | 生成 EDC 补偿信号 + 原始发射符号 | ✅ 完成 | `fiber_dataset.npz` (5 功率级别) |
 | B2. 验证绘图 | 星座图对比（EDC vs TX） | ✅ 完成 | `initial_test.png`, `power_sweep_overview.png` |
+| B3. MLP 补偿器 | 轻量 MLP 非线性补偿器训练 | ✅ 完成 | `train_mlp_nlc.py`, `mlp_nlc_model.pt` |
+| B3. 结果评估 | EVM / Q-factor / BER / 星座图 | ✅ 完成 | `mlp_results.csv`, 6 张评估图 |
 | 工程化 | Git 管理 + SOP 文档 | ✅ 完成 | `SSFM_SOP.md`, 已推送至 `git@github.com:YAHU2024/ofcPap.git` |
 
 ### 待完成
 
 | 阶段 | 任务 | 优先级 |
 |------|------|--------|
-| B3. PyTorch 模型 | 构建轻量 MLP 非线性补偿器并训练 | 🔴 高 |
 | B4. 性能评估 | 导出 BER 曲线、Q-factor 对比 | 🔴 高 |
 | C. 写作排版 | LaTeX 论文撰写与编译 | 🟡 中 |
 
@@ -125,8 +126,15 @@
 
 ### 关键仿真结果摘要
 
-- EVM U 型曲线: -4 dBm: 0.167 → -2 dBm: 0.153 (最优) → 0 dBm: 0.171 → +2 dBm: 0.232 → +4 dBm: 0.349
+**EDC 基线 (SSFM + 线性补偿):**
+- EVM U 型曲线: -4 dBm: 0.167 → -2 dBm: 0.153 (最优) → 0 dBm: 0.171 → +2 dBm: 0.234 → +4 dBm: 0.348
 - 相位误差单调递增 (0.057 → 0.336 rad)，确认 SPM 非线性相位噪声主导高功率区域
 - 数据集结构: `{X_<power>: EDC 输出符号, Y_<power>: 原始发射符号}` × 5 功率级别
+
+**MLP 非线性补偿 (MT-NN 简化版, 3,346 参数, M=2 记忆抽头):**
+- Q-factor 提升: -4 dBm: +8.50 dB → -2 dBm: +15.03 dB → 0 dBm: +23.68 dB → +2 dBm: +31.98 dB → +4 dBm: +38.56 dB
+- EVM 改善: 高功率 (+4 dBm) 从 0.348 → 0.0041 (98.8% 降低)
+- Q-gain 随功率递增，证实 MLP 主要消除确定性非线性损伤（ASE 噪声不可预测）
+- 模型输出: `mlp_nlc_model.pt`, `mlp_results.csv`, 星座图/训练曲线 6 张
 
 ---
