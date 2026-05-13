@@ -111,12 +111,13 @@
 | B3. 结果评估 | EVM / Q-factor / BER / 星座图 | ✅ 完成 | `mlp_results.csv`, 6 张评估图 |
 | 工程化 | Git 管理 + SOP 文档 | ✅ 完成 | `SSFM_SOP.md`, 已推送至 `git@github.com:YAHU2024/ofcPap.git` |
 | B4. 性能评估 | BER 曲线、Q-factor 对比、复杂度分析 | ✅ 完成 | `eval_performance_b4.py`, `b4_summary.csv`, 4 张评估图 |
+| C. 写作排版 | LaTeX 论文撰写与编译 | ✅ 完成 | `paper.tex`, `paper.pdf` (5 页, IEEE 格式) |
 
 ### 待完成
 
 | 阶段 | 任务 | 优先级 |
 |------|------|--------|
-| C. 写作排版 | LaTeX 论文撰写与编译 | 🟡 中 |
+| -- | （暂无待完成任务） | -- |
 
 ### 调研阶段产出（3 篇参考论文）
 

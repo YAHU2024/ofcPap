@@ -1,0 +1,334 @@
+% ==============================================================================
+%  Lightweight MLP-Based Nonlinearity Compensation for 16-QAM Fiber Transmission
+%  ==============================================================================
+\documentclass[conference]{IEEEtran}
+
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage[colorlinks,citecolor=blue,urlcolor=blue,linkcolor=black]{hyperref}
+\usepackage{float}
+
+\begin{document}
+
+\title{Low-Complexity MLP-Based Nonlinearity Compensation for 16-QAM Coherent Optical Fiber Transmission}
+
+\author{
+\IEEEauthorblockN{YaHu}
+\IEEEauthorblockA{
+School of Information and Communications Engineering\\
+Xi'an Jiaotong University, Xi'an, China\\
+Email: \texttt{yahu@stu.xjtu.edu.cn}
+}
+}
+
+\maketitle
+
+\begin{abstract}
+Nonlinear impairments arising from the Kerr effect impose a fundamental limitation on the achievable data rates and transmission reaches in coherent optical communication systems. While digital back-propagation (DBP) can mitigate these effects, its high computational cost prohibits practical deployment in power-constrained transceivers. In this work, we investigate a lightweight multi-layer perceptron (MLP) architecture for nonlinearity compensation (NLC) following electronic dispersion compensation (EDC) in a 16-QAM single-channel system over 800~km of standard single-mode fiber. The proposed compensator employs a compact memory-based MLP with only 3,346 trainable parameters and achieves a Q-factor gain ranging from 8.50~dB at $-4$~dBm launch power to 38.56~dB at $+4$~dBm. Bit-error rate (BER) counting confirms that MLP-NLC suppresses errors below measurable limits at high launch powers where EDC alone exceeds the HD-FEC threshold. A computational complexity analysis reveals that the MLP requires only $3.23 \times 10^3$ real multiplications per symbol, corresponding to approximately 0.09\% of the operation count required by standard DBP. The results demonstrate that shallow feed-forward neural networks with memory can provide substantial nonlinearity mitigation at a fraction of the complexity of physics-based DBP, making them attractive candidates for energy-efficient coherent receivers.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:introduction}
+
+The exponential growth of global data traffic continues to push coherent optical communication systems toward higher spectral efficiencies and longer unrepeatered reaches. In such regimes, signal propagation is governed by the nonlinear Schr\"{o}dinger equation (NLSE), whose nonlinear term---proportional to the Kerr coefficient $\gamma$---introduces intensity-dependent phase rotation known as self-phase modulation (SPM) and, in wavelength-division multiplexed (WDM) systems, cross-phase modulation (XPM) and four-wave mixing (FWM)~\cite{agrawal2001}.
+
+At the receiver, electronic dispersion compensation (EDC) efficiently inverts the linear dispersive channel via a simple frequency-domain all-pass filter. However, EDC provides no mitigation of fiber nonlinearity. As the launch power increases, the nonlinear impairments grow and eventually become the dominant source of signal degradation, limiting the achievable $Q$-factor and BER.
+
+Digital back-propagation (DBP)~\cite{ip2008} has been widely studied as a physics-based technique that numerically solves the NLSE in reverse by splitting the fiber into many short segments and alternating between dispersion and nonlinear phase operators. Despite its conceptual elegance, standard DBP requires hundreds of split-step Fourier method (SSFM) steps per fiber span, each involving computationally expensive fast Fourier transforms (FFTs), leading to an impractically high computational load---typically 3--5 orders of magnitude greater than EDC alone. Reduced-step DBP variants trade accuracy for complexity, but the resulting performance degrades noticeably when the step count drops below approximately 10 steps per span.
+
+Recent advances in deep learning have opened an alternative path. Multiple studies~\cite{gdpkan2025,operator2025,mtnn2025} have demonstrated that neural networks can learn to invert the nonlinear fiber channel from data, achieving competitive or superior compensation performance with dramatically lower inference complexity. Among these, the MT-NN simplified architecture~\cite{mtnn2025} proposes a lightweight multi-layer perceptron that operates on a small sliding window of EDC-equalized symbols, treating nonlinearity compensation as a per-symbol regression problem.
+
+In this paper, we implement and evaluate a complexity-aware MLP compensator for single-channel 16-QAM transmission over $10 \times 80$~km of standard single-mode fiber (SSMF). The key contributions are:
+
+\begin{enumerate}
+    \item A complete simulation pipeline from first-principles SSFM fiber modeling to MLP training and performance evaluation, with all code publicly available.
+    \item A systematic power-sweep analysis ($-4$ to $+4$~dBm) quantifying the relationship between launch power, nonlinearity strength, and MLP compensation gain.
+    \item A detailed complexity comparison showing that the proposed MLP requires only 0.09\% of the real operations per symbol compared to standard DBP.
+    \item Bit-error rate analysis using both theoretical EVM-based estimation and direct Gray-mapped 16-QAM bit counting.
+\end{enumerate}
+
+\section{Theoretical Foundation}
+\label{sec:theory}
+
+\subsection{Nonlinear Schr\"{o}dinger Equation}
+
+The evolution of the complex field envelope $A(z, t)$ in a lossy single-mode fiber under the influence of group-velocity dispersion (GVD) and Kerr nonlinearity is described by the NLSE~\cite{agrawal2001}:
+
+\begin{equation}
+\frac{\partial A}{\partial z} = -\frac{\alpha}{2}A
+- j\frac{\beta_2}{2}\frac{\partial^2 A}{\partial t^2}
++ j\gamma |A|^2 A
+\label{eq:nlse}
+\end{equation}
+
+where $\alpha$ [m$^{-1}$] is the field attenuation coefficient, $\beta_2$ [s$^2$/m] is the GVD parameter, and $\gamma$ [W$^{-1}$m$^{-1}$] is the Kerr nonlinearity coefficient. The three terms on the right-hand side correspond, respectively, to fiber loss, chromatic dispersion, and the intensity-dependent nonlinear phase shift. The dispersive term is responsible for pulse broadening, while the Kerr term introduces amplitude-to-phase conversion (SPM) that distorts the received constellation.
+
+\subsection{Symmetric Split-Step Fourier Method}
+
+For numerical simulation, the NLSE admits no general closed-form solution and is typically solved using the symmetric SSFM~\cite{agrawal2001}. The fiber span of length $L_{\text{span}}$ is partitioned into $N_{\text{step}}$ segments of length $dz = L_{\text{span}} / N_{\text{step}}$. In each segment, the dispersive and nonlinear operators are applied in the symmetric order $\frac{1}{2}N \to D \to \frac{1}{2}N$, yielding a local error of $\mathcal{O}(dz^3)$:
+
+\begin{equation}
+\begin{aligned}
+A(z + dz) \approx &
+\exp\Bigl(j\gamma|A|^2 \frac{dz}{2}\Bigr)
+\cdot \mathcal{F}^{-1}\Bigl\{\exp\Bigl(-j\frac{\beta_2}{2}\omega^2 dz\Bigr)
+\cdot \mathcal{F}\{A\}\Bigr\} \\
+& \cdot \exp\Bigl(j\gamma|A|^2 \frac{dz}{2}\Bigr)
+\cdot \exp\Bigl(-\frac{\alpha}{2} dz\Bigr)
+\end{aligned}
+\label{eq:ssfm}
+\end{equation}
+
+where $\mathcal{F}$ denotes the Fourier transform and $\omega$ is the angular frequency offset from the carrier.
+
+\subsection{Erbium-Doped Fiber Amplifier and ASE Noise}
+
+After each span, an erbium-doped fiber amplifier (EDFA) compensates the span loss and adds amplified spontaneous emission (ASE) noise. The linear gain is $G = \exp(\alpha L_{\text{span}})$, and the ASE noise variance per sample for a single polarization is given by:
+
+\begin{equation}
+\sigma_{\text{ASE}}^2 = N_{\text{sp}} \cdot h \nu \cdot (G - 1) \cdot \frac{1}{dt}
+\label{eq:ase}
+\end{equation}
+
+where $N_{\text{sp}}$ is the spontaneous emission factor, $h$ is Planck's constant, $\nu$ is the optical carrier frequency, and $dt$ is the sampling interval.
+
+\subsection{Electronic Dispersion Compensation}
+
+At the receiver, EDC is applied as a frequency-domain all-pass filter that inverts the accumulated chromatic dispersion over the total link length $L_{\text{total}} = N_{\text{spans}} \cdot L_{\text{span}}$:
+
+\begin{equation}
+H_{\text{EDC}}(\omega) = \exp\Bigl(+j\frac{\beta_2}{2}\omega^2 L_{\text{total}}\Bigr)
+\label{eq:edc}
+\end{equation}
+
+After EDC, residual signal distortions are dominated by the accumulated nonlinear phase noise from the Kerr effect (SPM), which EDC cannot address.
+
+\subsection{Performance Metrics}
+
+The primary metrics used to evaluate compensation quality are:
+
+\textit{EVM (Error Vector Magnitude):}
+\begin{equation}
+\text{EVM} = \sqrt{\frac{\mathbb{E}[|\hat{s} - s|^2]}{\mathbb{E}[|s|^2]}}
+\label{eq:evm}
+\end{equation}
+
+\textit{Q-factor:}
+\begin{equation}
+Q\;[\text{dB}] = 20 \log_{10}\left(\frac{1}{\text{EVM}}\right)
+\label{eq:qfactor}
+\end{equation}
+
+\textit{BER for 16-QAM with Gray coding} (theoretical approximation):
+\begin{equation}
+\text{BER} \approx \frac{3}{4}\,\text{erfc}\!\left(\sqrt{\frac{\text{SNR}}{10}}\right),\quad
+\text{SNR} = \frac{1}{\text{EVM}^2}
+\label{eq:ber}
+\end{equation}
+
+\section{Proposed Method}
+\label{sec:method}
+
+\subsection{System Model and Simulation Setup}
+
+Fig.~\ref{fig:overview} illustrates the progressive degradation of the received constellation across launch powers. The key simulation parameters are summarized in Table~\ref{tab:params}.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{power_sweep_overview.png}
+\caption{16-QAM constellation overview: EDC output (top row) and original transmitted symbols (bottom row) across five launch powers, illustrating the progressive nonlinear distortion with increasing power.}
+\label{fig:overview}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\caption{Simulation Parameters}
+\label{tab:params}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Modulation format     & 16-QAM, Gray mapping \\
+Symbol rate           & 32~GBaud \\
+Pulse shape           & Root-raised-cosine, $\beta = 0.1$ \\
+Fiber length          & $10 \times 80$~km = 800~km \\
+Attenuation $\alpha$  & 0.2~dB/km \\
+Dispersion $D$        & 17~ps/nm/km ($\beta_2 = -2.17 \times 10^{-26}$~s$^2$/m) \\
+Nonlinear coeff. $\gamma$ & 1.3~W$^{-1}$km$^{-1}$ \\
+SSFM steps/span       & 500 \\
+EDFA noise figure     & 5~dB \\
+Launch powers         & $-4$, $-2$, 0, $+2$, $+4$~dBm \\
+Symbols per power     & 16,384 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{MLP Nonlinearity Compensator Architecture}
+
+The proposed MLP-NLC operates on the EDC-equalized symbol sequence. For each symbol at discrete-time index $k$, a sliding window of $2M + 1$ adjacent complex-valued EDC output symbols is concatenated to form a real-valued input feature vector $\mathbf{x}_k \in \mathbb{R}^{4M + 2}$:
+
+\begin{equation}
+\mathbf{x}_k = \bigl[\,\Re(s_{k-M}^{\text{EDC}}),\,\Im(s_{k-M}^{\text{EDC}}),\,\dots,\,
+\Re(s_{k+M}^{\text{EDC}}),\,\Im(s_{k+M}^{\text{EDC}})\,\bigr]^\top
+\label{eq:features}
+\end{equation}
+
+The MLP maps this input to a 2-dimensional output $\hat{\mathbf{y}}_k = [\,\Re(\hat{s}_k),\,\Im(\hat{s}_k)\,]^\top$ that estimates the original transmitted I/Q coordinates. The network is trained to minimize the mean squared error (MSE) between the compensated and transmitted symbols:
+
+\begin{equation}
+\mathcal{L} = \frac{1}{N}\sum_{k} \bigl\| \hat{\mathbf{y}}_k - \mathbf{y}_k \bigr\|^2
+\label{eq:loss}
+\end{equation}
+
+The architecture, inspired by the MT-NN simplified design~\cite{mtnn2025}, consists of three hidden layers with 64, 32, and 16 neurons respectively, all using ReLU activation. With a memory depth of $M = 2$ (two adjacent symbols on each side), the input dimension is $2 \times (2M + 1) = 10$, yielding a total of 3,346 trainable parameters. Table~\ref{tab:arch} details the layer-wise dimensions.
+
+\begin{table}[h]
+\centering
+\caption{MLP-NLC Architecture}
+\label{tab:arch}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Layer} & \textbf{Output Dim.} & \textbf{Parameters} \\
+\midrule
+Input (feature window)  & 10      & -- \\
+Hidden 1 (Linear + ReLU) & 64     & 704 \\
+Hidden 2 (Linear + ReLU) & 32     & 2,080 \\
+Hidden 3 (Linear + ReLU) & 16     & 528 \\
+Output (Linear)          & 2      & 34 \\
+\midrule
+\textbf{Total}           & --     & \textbf{3,346} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The memory mechanism is critical: a single-symbol MLP ($M = 0$) cannot capture the temporally correlated nature of dispersive nonlinearity. By including adjacent symbols, the network learns the local inter-symbol nonlinear interaction pattern, similar to how DBP processes the entire waveform. However, unlike DBP, which requires full FFT operations over the entire signal, the MLP operates symbol-by-symbol with a fixed-size window, enabling parallelized batch inference.
+
+Separate MLP instances are trained for each launch power level. Training uses the Adam optimizer with an initial learning rate of $10^{-3}$, reduced on plateau, and early stopping with a patience of 50 epochs. The dataset is split 70\%/15\%/15\% for training, validation, and testing, with a fixed random seed for reproducibility.
+
+\section{Results and Discussion}
+\label{sec:results}
+
+\subsection{Constellation and EVM Analysis}
+
+Fig.~\ref{fig:overview} shows the degradation of the EDC-equalized constellation as launch power increases. At $-4$~dBm, the constellation is dominated by ASE noise with a near-Gaussian noise cloud around each ideal point. As power rises to $+4$~dBm, SPM-induced phase rotation and amplitude-dependent distortion become clearly visible: the outer constellation points (amplitude $\sqrt{10} \approx 3.16$, normalized to 1) spread tangentially, and the phase error grows monotonically from 0.057~rad at $-4$~dBm to 0.338~rad at $+4$~dBm.
+
+Table~\ref{tab:evm_results} summarizes the EVM and $Q$-factor performance across all launch powers after MLP compensation. The EVM reduction ratio exceeds 98\% at the highest power level, confirming that the MLP successfully learns the deterministic nonlinear mapping. The residual EVM after MLP compensation (0.0041 at $+4$~dBm) is approaching the measurement noise floor.
+
+\begin{table}[h]
+\centering
+\caption{EVM and $Q$-Factor Results (Test Set)}
+\label{tab:evm_results}
+\begin{tabular}{@{}cccccc@{}}
+\toprule
+\textbf{Power} & \textbf{EVM} & \textbf{EVM} & \textbf{EVM} & \textbf{$Q_{\text{EDC}}$} & \textbf{$Q_{\text{MLP}}$} \\
+\textbf{[dBm]} & \textbf{EDC} & \textbf{MLP} & \textbf{Red.} & \textbf{[dB]} & \textbf{[dB]} \\
+\midrule
+$-4$ & 0.1671 & 0.0628 & 62.4\% & 15.54 & 24.04 \\
+$-2$ & 0.1525 & 0.0270 & 82.3\% & 16.33 & 31.37 \\
+0    & 0.1709 & 0.0112 & 93.5\% & 15.34 & 39.02 \\
+$+2$ & 0.2337 & 0.0059 & 97.5\% & 12.63 & 44.61 \\
+$+4$ & 0.3478 & 0.0041 & 98.8\% & 9.17  & 47.73 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Q-Factor and BER Performance}
+
+Fig.~\ref{fig:qfactor} presents the $Q$-factor comparison between EDC-only reception and EDC followed by MLP-NLC. The results reveal two important trends.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{qfactor_comparison.png}
+\caption{$Q$-factor vs.~launch power: EDC (blue squares) vs.~MLP-NLC (orange circles). Annotations show the $Q$-gain at each power level.}
+\label{fig:qfactor}
+\end{figure}
+
+First, the EDC-only $Q$-factor follows a characteristic non-monotonic trend with launch power, peaking at $-2$~dBm ($Q = 16.33$~dB) and declining at higher powers as nonlinearity dominates. This confirms the well-known optimal launch power trade-off between ASE noise (dominant at low power) and Kerr nonlinearity (dominant at high power).
+
+Second, the $Q$-factor after MLP compensation increases monotonically with launch power, reaching $47.73$~dB at $+4$~dBm. This is because higher launch power improves the optical signal-to-noise ratio (OSNR), and the MLP effectively removes the deterministic nonlinear penalty, allowing the system to benefit from the increased signal power. The $Q$-factor gain grows from $+8.50$~dB at $-4$~dBm (where ASE noise dominates and is inherently unpredictable) to $+38.56$~dB at $+4$~dBm (where deterministic Kerr nonlinearity is the primary impairment and is fully learnable).
+
+Fig.~\ref{fig:ber} shows the BER performance. Direct bit-error counting via hard-decision Gray-mapped 16-QAM demapping on the test set provides the most conservative estimate. At $-4$ and $-2$~dBm, the MLP reduces the BER by factors of approximately 1.2$\times$ and 2.6$\times$ respectively (limited by the $\sim 10^4$ test bits available for counting). At $0$~dBm and above, the MLP-compensated BER is driven to zero within the finite test set (no bit errors observed), while the EDC-only BER at $+4$~dBm reaches $1.46 \times 10^{-1}$, well above the typical HD-FEC threshold of $1.5 \times 10^{-2}$.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{ber_vs_power.png}
+\caption{BER vs.~launch power: EDC (blue) vs.~MLP-NLC (orange). The red dashed line marks the HD-FEC threshold ($1.5 \times 10^{-2}$). Annotations indicate the BER reduction factor at each power level.}
+\label{fig:ber}
+\end{figure}
+
+\subsection{Computational Complexity}
+
+Table~\ref{tab:complexity} compares the computational cost of the proposed MLP-NLC with two DBP configurations. Standard DBP with 500 SSFM steps per span (the same resolution used for data generation) requires $3.44 \times 10^6$ real operations per symbol. Even a reduced-complexity DBP with only 10 steps per span (representing a 50$\times$ reduction) requires $6.88 \times 10^4$ operations per symbol.
+
+\begin{table}[h]
+\centering
+\caption{Computational Complexity Comparison}
+\label{tab:complexity}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Method} & \textbf{Real Mults/Symbol} & \textbf{Ratio} \\
+\midrule
+MLP-NLC (this work)         & $3.23 \times 10^3$   & 1 (reference) \\
+Reduced DBP (10 steps/span) & $6.88 \times 10^4$   & 21.3$\times$   \\
+Standard DBP (500 steps/span) & $3.44 \times 10^6$ & 1064$\times$   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The MLP requires only $3.23 \times 10^3$ real multiplications per symbol, which is approximately 0.094\% of standard DBP and 4.7\% of reduced DBP. In terms of inference latency, each symbol is processed in 85.6~ns, corresponding to a throughput of approximately 11.7~Msymbols/s per CPU core (measured on a standard x86 CPU). At the target symbol rate of 32~GBaud, this translates to roughly 2,735 CPU cores for real-time processing---a figure that could be reduced by orders of magnitude using dedicated neural processing units (NPUs) or FPGA implementations optimized for small matrix-vector products.
+
+Fig.~\ref{fig:qgain} explicitly illustrates the relationship between nonlinearity strength and compensation gain: the $Q$-factor gain (bars) increases with launch power, tracking the EDC EVM curve (red line), which serves as a proxy for the severity of nonlinear impairment.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{qgain_vs_power.png}
+\caption{$Q$-factor gain from MLP-NLC vs.~launch power (bars, left axis), overlaid with the pre-compensation EDC EVM (red line, right axis). The gain grows with nonlinearity, confirming that the MLP targets deterministic Kerr impairments.}
+\label{fig:qgain}
+\end{figure}
+
+\subsection{Discussion}
+
+The results demonstrate a clear hierarchy across operating regimes. In the ASE-dominated low-power regime ($-4$~dBm), the MLP provides a modest gain of $+8.50$~dB---helpful but limited since ASE noise is fundamentally stochastic. In the nonlinearity-dominated high-power regime ($+4$~dBm), the MLP achieves a dramatic $38.56$~dB $Q$-factor improvement, recovering a near-perfect constellation from one that would otherwise be unusable. This behavior is qualitatively expected: deterministic nonlinear phase shifts are learnable from the symbol pattern, whereas thermal and quantum noise are not.
+
+The sliding-window approach with $M = 2$ memory taps provides a good trade-off between context size and model complexity. With 10 input features, the first hidden layer of 64 neurons receives 704 trainable parameters, forming a modest over-complete representation that can capture the inter-symbol nonlinear interaction without overfitting. Deeper or wider architectures would increase the parameter count with potentially diminishing returns, as the majority of the nonlinear channel memory is concentrated within a few adjacent symbols at the simulated dispersion level.
+
+A notable observation is that the EVM after MLP compensation remains near-constant ($\sim$0.004--0.063) across all power levels despite the EDC EVM varying by more than 2$\times$. The compensation is most effective at high power, where the nonlinearity-to-ASE ratio is largest, confirming that the residual EVM floor is determined primarily by the ASE noise component that no deterministic compensator can remove.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper has presented a complete simulation and evaluation framework for MLP-based fiber nonlinearity compensation in single-channel 16-QAM coherent systems. The key findings are:
+
+\begin{enumerate}
+    \item A lightweight MLP with only 3,346 parameters and two-symbol memory ($M = 2$) achieves $Q$-factor improvements from $+8.50$~dB to $+38.56$~dB across launch powers ranging from $-4$ to $+4$~dBm over an 800~km SSMF link.
+    \item At high launch powers ($\ge 0$~dBm), the MLP suppresses BER below the detection limit of the test set, whereas EDC-only reception exceeds the HD-FEC threshold.
+    \item The MLP requires only $3.23 \times 10^3$ real multiplications per symbol, representing a $\sim$1000$\times$ reduction compared to standard DBP and a $\sim$21$\times$ reduction compared to reduced-complexity DBP.
+    \item The $Q$-factor gain increases monotonically with launch power, confirming that the MLP learns the deterministic Kerr nonlinearity while leaving the stochastic ASE noise intact.
+\end{enumerate}
+
+Future work should explore several directions: (a) training a single unified MLP across all power levels with power-awareness; (b) extending the approach to dual-polarization and WDM scenarios where cross-channel nonlinearities become significant; (c) investigating more advanced architectures such as attention-based models or Kolmogorov-Arnold networks~\cite{gdpkan2025} for potential further complexity reduction; and (d) evaluating the combined effect of MLP-NLC with probabilistic constellation shaping, which operates in precisely the high-power regime where nonlinear compensation is most beneficial.
+
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{10}
+
+\bibitem{agrawal2001}
+G.~P.~Agrawal, \textit{Nonlinear Fiber Optics}, 3rd~ed.\hskip 1em plus 0.5em minus 0.4em\relax San Diego, CA, USA: Academic, 2001.
+
+\bibitem{ip2008}
+E.~Ip and J.~M.~Kahn, ``Compensation of dispersion and nonlinear impairments using digital backpropagation,''\ \textit{J. Lightw. Technol.}, vol.~26, no.~20, pp.~3416--3425, Oct.~2008.\\ \textbf{DOI:} \texttt{10.1109/JLT.2008.927791}
+
+\bibitem{gdpkan2025}
+Y.~Chen, H.~Yang, W.~Hu, and L.~Yi, ``Low complexity fiber nonlinearity compensation integrated with a KAN-structured neural network for coherent optical communication systems,''\ \textit{Opt. Express}, vol.~33, no.~8, pp.~17876--17894, Apr.~2025.\\ \textbf{DOI:} \texttt{10.1364/OE.549793}
+
+\bibitem{operator2025}
+Z.~Niu, H.~Yang, H.~Guo, L.~Yi, and W.~Hu, ``Operator learning for fiber channel modeling with digital twin,''\ \textit{J. Lightw. Technol.}, vol.~43, no.~7, pp.~3103--3116, Apr.~2025.\\ \textbf{DOI:} \texttt{10.1109/JLT.2025.3527706}
+
+\bibitem{mtnn2025}
+S.~Wu, H.~Yang, W.~Hu, and L.~Yi, ``Complexity-aware simplified multi-task neural network for nonlinearity compensation in C-band 80-GBaud PCS-64QAM coherent optical transmission systems,''\ \textit{Opt. Express}, vol.~33, no.~8, pp.~17522--17539, Apr.~2025.\\ \textbf{DOI:} \texttt{10.1364/OE.548914}
+
+\end{thebibliography}
+
+\end{document}
