@@ -1,0 +1,131 @@
+低复杂度MLP非线性补偿器在16-QAM相干光纤传输系统中的应用研究
+
+黄子健
+武夷学院海峡成功学院
+中国，南平
+Email: yahu@stu.xjtu.edu.cn
+
+中图分类号：TN913.7
+
+摘要：
+克尔效应引起的非线性损伤对相干光通信系统的可达数据率和传输距离构成了根本性限制。数字反向传播（DBP）可有效缓解此类损伤，但其过高的计算复杂度阻碍了在功耗受限收发机中的实际部署。本文针对标准单模光纤800km单信道16-QAM传输系统，研究了一种级联于电子色散补偿（EDC）之后的轻量级多层感知器（MLP）非线性补偿方案。所提补偿器采用紧凑的带记忆MLP结构，仅含3,346个可训练参数，在-4dBm至+4dBm的入纤功率范围内实现了8.50dB至38.56dB的Q因子增益。误码率（BER）统计表明，在EDC单独处理已超出硬判决前向纠错（HD-FEC）门限的高入纤功率下，MLP-NLC可将误码抑制至可测量极限以下。计算复杂度分析显示，该MLP每符号仅需3.23×10³次实数乘法运算，约为标准DBP运算量的0.09%。上述结果表明，带记忆的浅层前馈神经网络能够以远低于物理模型驱动DBP的计算代价实现显著的非线性损伤抑制，是面向低功耗相干接收机的有力候选方案。
+
+关键词：光纤非线性补偿；多层感知器（MLP）；相干光通信；16-QAM；数字反向传播；克尔效应
+
+1 引言
+
+全球数据流量的指数级增长持续推动着相干光通信系统向更高频谱效率和更长无中继传输距离的方向演进。在此类工作区间内，信号传播受非线性薛定谔方程（NLSE）支配，其非线性项（正比于克尔系数γ）引入了强度相关的相位旋转，即自相位调制（SPM），以及在波分复用（WDM）系统中的交叉相位调制（XPM）和四波混频（FWM）效应。
+
+在接收端，电子色散补偿（EDC）通过频域全通滤波器即可高效地反转线性色散信道。然而，EDC对光纤非线性无能为力。随着入纤功率增大，非线性损伤逐渐加剧并最终成为信号劣化的主导因素，限制了系统可达到的Q因子和误码率。
+
+数字反向传播（DBP）作为一种基于物理模型的补偿技术已被广泛研究。该方法将光纤划分为多个短段，在每一段内交替施加色散和非线性相位算子，以数值方式逆向求解NLSE。尽管概念上简洁，但标准DBP每跨段需要数百个分步傅里叶法（SSFM）步骤，每步均需执行计算开销极大的快速傅里叶变换（FFT）。这导致DBP的计算负荷通常比EDC高出3至5个数量级，难以实际部署。降步DBP变体以精度换取复杂度，但当每跨段步数降至约10步以下时，补偿性能将显著下降。
+
+近年来，深度学习的进展为非线性补偿开辟了新的技术路径。多项研究已证明，神经网络可以从数据中学习反转非线性光纤信道，以远低于传统方法的推理复杂度实现具有竞争力甚至更优的补偿性能。其中，MT-NN简化架构提出了一种轻量级多层感知器，在EDC均衡后符号的小型滑动窗口上运行，将非线性补偿视为逐符号的回归问题。
+
+本文在单信道16-QAM、10×80km标准单模光纤（SSMF）传输场景下，实现并评估了一种复杂度感知的MLP非线性补偿器。主要贡献如下：
+
+(1) 构建了从第一性原理SSFM光纤建模到MLP训练与性能评估的完整仿真流水线，所有代码均已开源。
+(2) 开展了系统性的功率扫描分析（-4至+4dBm），量化了入纤功率、非线性强度与MLP补偿增益之间的定量关系。
+(3) 进行了详细的复杂度对比分析，结果表明所提MLP每符号所需实数运算量仅为标准DBP的0.09%。
+(4) 基于理论EVM估计和直接Gray映射16-QAM比特计数两种方法进行了误码率分析。
+
+2 理论基础
+
+2.1 非线性薛定谔方程
+
+在群速度色散（GVD）和克尔非线性的共同作用下，有耗单模光纤中复场包络A(z,t)的演化由NLSE描述。其中，α为场衰减系数，β₂为GVD参数，γ为克尔非线性系数。上式右侧三项分别对应光纤损耗、色度色散和强度相关的非线性相移。色散项导致脉冲展宽，而克尔项引入幅度-相位转换（SPM），使接收星座图发生畸变。
+
+2.2 对称分步傅里叶法
+
+对于数值仿真需求，NLSE不存在通用的解析解，通常采用对称SSFM进行数值求解。将长度为L_span的光纤跨段划分为N_step个长度为dz=L_span/N_step的微元。在每个微元中，色散和非线性算子按对称顺序(1/2)N→D→(1/2)N施加，从而获得O(dz³)的局部截断误差。其中F表示傅里叶变换，ω为相对于载波频率的角频率偏移量。
+
+2.3 掺铒光纤放大器与ASE噪声
+
+每个跨段之后，掺铒光纤放大器（EDFA）补偿跨段损耗并引入放大的自发辐射（ASE）噪声。线性增益为G=exp(αL_span)，单偏振态下每采样的ASE噪声方差由相关公式给出。其中，N_sp为自发辐射因子，h为普朗克常数，ν为光载波频率，dt为采样间隔。
+
+2.4 电子色散补偿
+
+在接收端，EDC以频域全通滤波器的形式实现，用于反转整条链路总长度L_total=N_spans·L_span上累积的色度色散。经EDC后，残余信号失真主要由克尔效应（SPM）引起的累积非线性相位噪声主导，这是EDC无法解决的。
+
+2.5 性能指标
+
+用于评价补偿质量的主要指标如下：
+
+EVM（误差矢量幅度）：定义为补偿后符号与原始发射符号之间的归一化均方根误差。
+
+Q因子：定义为20log₁₀(1/EVM)，单位为dB。
+
+Gray编码16-QAM的BER（理论近似）：基于EVM推导的SNR，通过互补误差函数erfc进行估计。
+
+3 所提方法
+
+3.1 系统模型与仿真设置
+
+关键仿真参数如下：调制格式为16-QAM、Gray映射；符号率为32GBaud；脉冲成型为根升余弦，滚降系数β=0.1；光纤长度为10×80km=800km；衰减系数α为0.2dB/km；色散系数D为17ps/nm/km（β₂=-2.17×10⁻²⁶s²/m）；非线性系数γ为1.3W⁻¹km⁻¹；SSFM步数每跨段为500；EDFA噪声指数为5dB；入纤功率分别为-4、-2、0、+2、+4dBm；每功率符号数为16,384。
+
+3.2 MLP非线性补偿器架构
+
+本文提出的MLP-NLC作用于经EDC均衡后的符号序列。对于离散时间索引k处的每一个符号，将包含2M+1个相邻复值EDC输出符号的滑动窗口拼接为实值输入特征向量。MLP将该输入映射为二维输出，用于估计原始发射信号的I/Q坐标。网络以补偿后符号与发射符号之间的均方误差（MSE）最小化为目标进行训练。
+
+该架构受MT-NN简化设计的启发，由三个隐藏层组成，神经元数分别为64、32和16，全部采用ReLU激活函数。记忆深度M=2（两侧各取2个相邻符号），输入维度为2×(2M+1)=10，总计可训练参数量为3,346个。网络各层维度如下：输入层（特征窗口）输出维度为10；隐藏层1（线性+ReLU）输出维度为64，参数量704；隐藏层2（线性+ReLU）输出维度为32，参数量2,080；隐藏层3（线性+ReLU）输出维度为16，参数量528；输出层（线性）输出维度为2，参数量34。
+
+记忆机制至关重要：无记忆的单符号MLP（M=0）无法捕获色散非线性在时域上的相关性。通过引入相邻符号，网络能够学习局部符号间非线性相互作用模式，其机理与DBP处理整个波形的思路类似。然而，与DBP需对整个信号执行完整的FFT运算不同，MLP以固定大小的窗口逐符号操作，天然支持并行化的批量推理。
+
+针对每个入纤功率级别分别训练独立的MLP模型。训练采用Adam优化器，初始学习率为10⁻³，学习率平台衰减策略，早停耐心值为50轮。数据集按70%/15%/15%的比例划分为训练集、验证集和测试集，并采用固定随机种子以保证可复现性。
+
+4 结果与讨论
+
+4.1 星座图与EVM分析
+
+EDC均衡后星座图随入纤功率增大而逐渐劣化。在-4dBm时，星座图主要表现为ASE噪声，各理想星座点周围呈近高斯分布的噪声云。当功率升至+4dBm时，SPM引起的相位旋转和幅度相关失真清晰可见：外层星座点（归一化幅度约为3.16）沿切向扩散，相位误差从-4dBm时的0.057rad单调增大至+4dBm时的0.338rad。
+
+EVM和Q因子性能测试结果显示，在最高功率下，EVM降低比超过98%，确认了MLP成功学习到确定性的非线性映射关系。经MLP补偿后的残余EVM（+4dBm时为0.0041）已接近测量噪声本底。具体数据如下：-4dBm时EDC的EVM为0.1671，MLP的EVM为0.0628，降低比为62.4%，Q_EDC为15.54dB，Q_MLP为24.04dB；-2dBm时EDC的EVM为0.1525，MLP的EVM为0.0270，降低比为82.3%，Q_EDC为16.33dB，Q_MLP为31.37dB；0dBm时EDC的EVM为0.1709，MLP的EVM为0.0112，降低比为93.5%，Q_EDC为15.34dB，Q_MLP为39.02dB；+2dBm时EDC的EVM为0.2337，MLP的EVM为0.0059，降低比为97.5%，Q_EDC为12.63dB，Q_MLP为44.61dB；+4dBm时EDC的EVM为0.3478，MLP的EVM为0.0041，降低比为98.8%，Q_EDC为9.17dB，Q_MLP为47.73dB。
+
+4.2 Q因子与BER性能
+
+Q因子对比结果显示两个重要趋势。首先，仅有EDC时的Q因子随入纤功率呈现特征性的非单调变化趋势，在-2dBm处达到峰值（Q=16.33dB），之后随功率增大而下降，因为非线性效应开始占主导地位。这验证了众所周知的入纤功率最优折中关系：低功率时ASE噪声占优，高功率时克尔非线性占优。其次，经MLP补偿后的Q因子随入纤功率单调递增，在+4dBm时达到47.73dB。这是因为更高的入纤功率改善了光信噪比（OSNR），而MLP有效消除了确定性的非线性代价，使系统能够充分受益于信号功率的增大。Q因子增益从-4dBm时的+8.50dB（此时ASE噪声占主导且本质不可预测）增长至+4dBm时的+38.56dB（此时确定性克尔非线性是主要损伤且完全可学习）。
+
+BER性能分析表明：基于硬判决Gray映射16-QAM解映射的测试集直接比特计数提供了最为保守的估计。在-4和-2dBm时，MLP分别将BER降低了约1.2倍和2.6倍（受到约10⁴测试比特可用数量的限制）。在0dBm及以上功率，MLP补偿后的BER在有限测试集中被降至零（未观测到误比特），而仅有EDC时的BER在+4dBm下达到1.46×10⁻¹，远高于典型的HD-FEC门限1.5×10⁻²。
+
+4.3 计算复杂度
+
+将本文提出的MLP-NLC与两种DBP配置的计算开销进行对比。每跨段500个SSFM步数的标准DBP（与数据生成所用分辨率一致）每符号需要3.44×10⁶次实数运算。即使每跨段仅10步的降复杂度DBP（计算量减少50倍），每符号仍需6.88×10⁴次运算。具体对比：MLP-NLC（本文）每符号实乘次数为3.23×10³，作为基准（比值为1）；降阶DBP（10步/跨段）每符号实乘次数为6.88×10⁴，比值为21.3倍；标准DBP（500步/跨段）每符号实乘次数为3.44×10⁶，比值为1064倍。
+
+MLP每符号仅需3.23×10³次实数乘法运算，约为标准DBP的0.094%、降阶DBP的4.7%。在推理延迟方面，每符号处理时间约为85.6ns，对应单个CPU核约11.7Msymbols/s的吞吐率（标准x86处理器实测）。在32GBaud的目标符号率下，这意味着约需2,735个CPU核来满足实时处理要求。若采用专为小型矩阵-向量乘法优化的神经处理单元（NPU）或FPGA实现，该数值可降低数个数量级。
+
+Q因子增益（柱状图）随入纤功率增大而增加，与EDC EVM曲线的走势一致，后者可作为非线性损伤严重程度的代理指标。
+
+4.4 讨论
+
+仿真结果揭示了不同工作区间之间的清晰层次。在ASE噪声主导的低功率区间（-4dBm），MLP提供了+8.50dB的增益，受限于ASE噪声的随机性，该提升幅度有限。在非线性主导的高功率区间（+4dBm），MLP实现了38.56dB的Q因子改善，从本已无法使用的星座图中恢复出近乎完美的信号。该规律在定性层面符合预期：确定性的非线性相移可从符号模式中学习，而热噪声和量子噪声无法被任何确定性补偿器消除。
+
+采用M=2个记忆抽头的滑动窗口方法在上下文范围与模型复杂度之间取得了良好的平衡。在10维输入特征下，第一隐藏层的64个神经元配备704个可训练参数，形成适度过完备的表示，可在不过拟合的前提下捕获符号间的非线性相互作用。在本文仿真色散水平下，非线性信道记忆主要集中在邻近的若干符号内，更宽或更深的网络将增加参数量而收益递减。
+
+可注意到的现象是，尽管EDC EVM在不同功率间的变化幅度超过2倍，但MLP补偿后的EVM在所有功率级别下均保持近似恒定（约0.004至0.063）。补偿效果在高功率下最为显著，此时非线性与ASE的比值最大，由此确认残余EVM下限主要由ASE噪声分量决定，而任何确定性补偿器均无法消除该分量。
+
+5 结论
+
+本文给出了完整的MLP基光纤非线性补偿仿真与评估框架，针对单信道16-QAM相干系统进行了全面分析。主要结论如下：
+
+(1) 仅含3,346个参数、2符号记忆（M=2）的轻量MLP，在800km SSMF链路上、-4至+4dBm的入纤功率范围内，实现了从+8.50dB到+38.56dB的Q因子改善。
+(2) 在高入纤功率下（≥0dBm），MLP将BER抑制至测试集检测极限以下，而仅有EDC的接收方案已超出HD-FEC门限。
+(3) MLP每符号仅需3.23×10³次实数乘法运算，相比标准DBP降低了约1000倍，相比降阶DBP降低了约21倍。
+(4) Q因子增益随入纤功率单调递增，证实了MLP学习并消除了确定性的克尔非线性损伤，同时保留了不可预测的随机ASE噪声。
+
+未来工作可从以下几个方向展开：(a) 训练跨功率级别感知的统一MLP模型；(b) 将本方法扩展至双偏振和WDM场景，此时跨信道非线性将变得显著；(c) 探索更先进的网络架构，如基于注意力机制的模型或Kolmogorov-Arnold网络，以寻求进一步的复杂度降低；(d) 评估MLP-NLC与概率星座整形技术的联合使用效果，后者恰好在非线性补偿收益最大的高功率区间发挥作用。
+
+英文标题、摘要与关键词
+
+Title: Low-Complexity MLP-Based Nonlinearity Compensation for 16-QAM Coherent Optical Fiber Transmission
+
+Abstract: Nonlinear impairments arising from the Kerr effect impose a fundamental limitation on the achievable data rates and transmission reaches in coherent optical communication systems. While digital back-propagation (DBP) can mitigate these effects, its high computational cost prohibits practical deployment in power-constrained transceivers. In this work, we investigate a lightweight multi-layer perceptron (MLP) architecture for nonlinearity compensation (NLC) following electronic dispersion compensation (EDC) in a 16-QAM single-channel system over 800km of standard single-mode fiber. The proposed compensator employs a compact memory-based MLP with only 3,346 trainable parameters and achieves a Q-factor gain ranging from 8.50dB at -4dBm launch power to 38.56dB at +4dBm. Bit-error rate (BER) counting confirms that MLP-NLC suppresses errors below measurable limits at high launch powers where EDC alone exceeds the HD-FEC threshold. A computational complexity analysis reveals that the MLP requires only 3.23×10³ real multiplications per symbol, corresponding to approximately 0.09% of the operation count required by standard DBP. The results demonstrate that shallow feed-forward neural networks with memory can provide substantial nonlinearity mitigation at a fraction of the complexity of physics-based DBP, making them attractive candidates for energy-efficient coherent receivers.
+
+Keywords: fiber nonlinearity compensation; multi-layer perceptron (MLP); coherent optical communication; 16-QAM; digital back-propagation; Kerr effect
+
+参考文献
+
+[1] AGRAWAL G P. Nonlinear Fiber Optics[M]. 3rd ed. San Diego: Academic, 2001.
+[2] IP E, KAHN J M. Compensation of dispersion and nonlinear impairments using digital backpropagation[J]. Journal of Lightwave Technology, 2008, 26(20): 3416-3425.
+[3] CHEN Y, YANG H, HU W, et al. Low complexity fiber nonlinearity compensation integrated with a KAN-structured neural network for coherent optical communication systems[J]. Optics Express, 2025, 33(8): 17876-17894.
+[4] NIU Z, YANG H, GUO H, et al. Operator learning for fiber channel modeling with digital twin[J]. Journal of Lightwave Technology, 2025, 43(7): 3103-3116.
+[5] WU S, YANG H, HU W, et al. Complexity-aware simplified multi-task neural network for nonlinearity compensation in C-band 80-GBaud PCS-64QAM coherent optical transmission systems[J]. Optics Express, 2025, 33(8): 17522-17539.
