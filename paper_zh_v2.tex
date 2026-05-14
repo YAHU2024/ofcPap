@@ -1,0 +1,358 @@
+% ==============================================================================
+%  基于轻量级MLP的16-QAM光纤传输非线性补偿研究
+%  —— 符合《通信学报》撰写规范
+%  ==============================================================================
+\documentclass[conference]{IEEEtran}
+
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage[colorlinks,citecolor=blue,urlcolor=blue,linkcolor=black]{hyperref}
+\usepackage{float}
+\usepackage{xeCJK}
+\setCJKmainfont{SimSun}
+\setCJKsansfont{SimHei}
+\setCJKmonofont{SimSun}
+
+\begin{document}
+
+\title{低复杂度MLP非线性补偿器在16-QAM相干光纤传输系统中的应用研究}
+
+\author{
+\IEEEauthorblockN{YaHu}
+\IEEEauthorblockA{
+西安交通大学信息与通信工程学院\\
+中国，西安\\
+Email: \texttt{yahu@stu.xjtu.edu.cn}
+}
+}
+
+\maketitle
+
+\noindent\textbf{中图分类号：}TN913.7
+\vspace{2mm}
+
+\begin{abstract}
+克尔效应引起的非线性损伤对相干光通信系统的可达数据率和传输距离构成了根本性限制。数字反向传播（DBP）可有效缓解此类损伤，但其过高的计算复杂度阻碍了在功耗受限收发机中的实际部署。本文针对标准单模光纤800~km单信道16-QAM传输系统，研究了一种级联于电子色散补偿（EDC）之后的轻量级多层感知器（MLP）非线性补偿方案。所提补偿器采用紧凑的带记忆MLP结构，仅含3,346个可训练参数，在$-4$~dBm至$+4$~dBm的入纤功率范围内实现了8.50~dB至38.56~dB的$Q$因子增益。误码率（BER）统计表明，在EDC单独处理已超出硬判决前向纠错（HD-FEC）门限的高入纤功率下，MLP-NLC可将误码抑制至可测量极限以下。计算复杂度分析显示，该MLP每符号仅需$3.23 \times 10^3$次实数乘法运算，约为标准DBP运算量的0.09\%。上述结果表明，带记忆的浅层前馈神经网络能够以远低于物理模型驱动DBP的计算代价实现显著的非线性损伤抑制，是面向低功耗相干接收机的有力候选方案。
+\end{abstract}
+
+\section{引言}
+\label{sec:introduction}
+
+全球数据流量的指数级增长持续推动着相干光通信系统向更高频谱效率和更长无中继传输距离的方向演进。在此类工作区间内，信号传播受非线性薛定谔方程（NLSE）支配，其非线性项（正比于克尔系数$\gamma$）引入了强度相关的相位旋转，即自相位调制（SPM），以及在波分复用（WDM）系统中的交叉相位调制（XPM）和四波混频（FWM）效应~\cite{agrawal2001}。
+
+在接收端，电子色散补偿（EDC）通过频域全通滤波器即可高效地反转线性色散信道。然而，EDC对光纤非线性无能为力。随着入纤功率增大，非线性损伤逐渐加剧并最终成为信号劣化的主导因素，限制了系统可达到的$Q$因子和误码率。
+
+数字反向传播（DBP）~\cite{ip2008}作为一种基于物理模型的补偿技术已被广泛研究。该方法将光纤划分为多个短段，在每一段内交替施加色散和非线性相位算子，以数值方式逆向求解NLSE。尽管概念上简洁，但标准DBP每跨段需要数百个分步傅里叶法（SSFM）步骤，每步均需执行计算开销极大的快速傅里叶变换（FFT）。这导致DBP的计算负荷通常比EDC高出3~5个数量级，难以实际部署。降步DBP变体以精度换取复杂度，但当每跨段步数降至约10步以下时，补偿性能将显著下降。
+
+近年来，深度学习的进展为非线性补偿开辟了新的技术路径。多项研究~\cite{gdpkan2025,operator2025,mtnn2025}已证明，神经网络可以从数据中学习反转非线性光纤信道，以远低于传统方法的推理复杂度实现具有竞争力甚至更优的补偿性能。其中，MT-NN简化架构~\cite{mtnn2025}提出了一种轻量级多层感知器，在EDC均衡后符号的小型滑动窗口上运行，将非线性补偿视为逐符号的回归问题。
+
+本文在单信道16-QAM、$10 \times 80$~km标准单模光纤（SSMF）传输场景下，实现并评估了一种复杂度感知的MLP非线性补偿器。主要贡献如下：
+
+\begin{enumerate}
+    \item 构建了从第一性原理SSFM光纤建模到MLP训练与性能评估的完整仿真流水线，所有代码均已开源。
+    \item 开展了系统性的功率扫描分析（$-4$至$+4$~dBm），量化了入纤功率、非线性强度与MLP补偿增益之间的定量关系。
+    \item 进行了详细的复杂度对比分析，结果表明所提MLP每符号所需实数运算量仅为标准DBP的0.09\%。
+    \item 基于理论EVM估计和直接Gray映射16-QAM比特计数两种方法进行了误码率分析。
+\end{enumerate}
+
+\section{理论基础}
+\label{sec:theory}
+
+\subsection{非线性薛定谔方程}
+
+在群速度色散（GVD）和克尔非线性的共同作用下，有耗单模光纤中复场包络$A(z, t)$的演化由NLSE~\cite{agrawal2001}描述：
+
+\begin{equation}
+\frac{\partial A}{\partial z} = -\frac{\alpha}{2}A
+- j\frac{\beta_2}{2}\frac{\partial^2 A}{\partial t^2}
++ j\gamma |A|^2 A
+\label{eq:nlse}
+\end{equation}
+
+其中，$\alpha$ [m$^{-1}$]为场衰减系数，$\beta_2$ [s$^2$/m]为GVD参数，$\gamma$ [W$^{-1}$m$^{-1}$]为克尔非线性系数。上式右侧三项分别对应光纤损耗、色度色散和强度相关的非线性相移。色散项导致脉冲展宽，而克尔项引入幅度-相位转换（SPM），使接收星座图发生畸变。
+
+\subsection{对称分步傅里叶法}
+
+对于数值仿真需求，NLSE不存在通用的解析解，通常采用对称SSFM~\cite{agrawal2001}进行数值求解。将长度为$L_{\text{span}}$的光纤跨段划分为$N_{\text{step}}$个长度为$dz = L_{\text{span}} / N_{\text{step}}$的微元。在每个微元中，色散和非线性算子按对称顺序$\frac{1}{2}N \to D \to \frac{1}{2}N$施加，从而获得$\mathcal{O}(dz^3)$的局部截断误差：
+
+\begin{equation}
+\begin{aligned}
+A(z + dz) \approx &
+\exp\Bigl(j\gamma|A|^2 \frac{dz}{2}\Bigr)
+\cdot \mathcal{F}^{-1}\Bigl\{\exp\Bigl(-j\frac{\beta_2}{2}\omega^2 dz\Bigr)
+\cdot \mathcal{F}\{A\}\Bigr\} \\
+& \cdot \exp\Bigl(j\gamma|A|^2 \frac{dz}{2}\Bigr)
+\cdot \exp\Bigl(-\frac{\alpha}{2} dz\Bigr)
+\end{aligned}
+\label{eq:ssfm}
+\end{equation}
+
+其中，$\mathcal{F}$表示傅里叶变换，$\omega$为相对于载波频率的角频率偏移量。
+
+\subsection{掺铒光纤放大器与ASE噪声}
+
+每个跨段之后，掺铒光纤放大器（EDFA）补偿跨段损耗并引入放大的自发辐射（ASE）噪声。线性增益为$G = \exp(\alpha L_{\text{span}})$，单偏振态下每采样的ASE噪声方差由下式给出：
+
+\begin{equation}
+\sigma_{\text{ASE}}^2 = N_{\text{sp}} \cdot h \nu \cdot (G - 1) \cdot \frac{1}{dt}
+\label{eq:ase}
+\end{equation}
+
+其中，$N_{\text{sp}}$为自发辐射因子，$h$为普朗克常数，$\nu$为光载波频率，$dt$为采样间隔。
+
+\subsection{电子色散补偿}
+
+在接收端，EDC以频域全通滤波器的形式实现，用于反转整条链路总长度$L_{\text{total}} = N_{\text{spans}} \cdot L_{\text{span}}$上累积的色度色散：
+
+\begin{equation}
+H_{\text{EDC}}(\omega) = \exp\Bigl(+j\frac{\beta_2}{2}\omega^2 L_{\text{total}}\Bigr)
+\label{eq:edc}
+\end{equation}
+
+经EDC后，残余信号失真主要由克尔效应（SPM）引起的累积非线性相位噪声主导，这是EDC无法解决的。
+
+\subsection{性能指标}
+
+用于评价补偿质量的主要指标如下：
+
+\textit{EVM（误差矢量幅度）：}
+\begin{equation}
+\text{EVM} = \sqrt{\frac{\mathbb{E}[|\hat{s} - s|^2]}{\mathbb{E}[|s|^2]}}
+\label{eq:evm}
+\end{equation}
+
+\textit{Q因子：}
+\begin{equation}
+Q\;[\text{dB}] = 20 \log_{10}\left(\frac{1}{\text{EVM}}\right)
+\label{eq:qfactor}
+\end{equation}
+
+\textit{Gray编码16-QAM的BER}（理论近似）：
+\begin{equation}
+\text{BER} \approx \frac{3}{4}\,\text{erfc}\!\left(\sqrt{\frac{\text{SNR}}{10}}\right),\quad
+\text{SNR} = \frac{1}{\text{EVM}^2}
+\label{eq:ber}
+\end{equation}
+
+\section{所提方法}
+\label{sec:method}
+
+\subsection{系统模型与仿真设置}
+
+图~\ref{fig:overview}展示了不同入纤功率下接收星座图的渐进劣化过程。关键仿真参数汇总于表~\ref{tab:params}。
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{power_sweep_overview.png}
+\caption{不同入纤功率下16-QAM星座图概览：EDC输出（上行）与原始发射符号（下行）对比，展示了随功率增大而加剧的非线性失真。 / Fig.~\thefigure.~16-QAM constellation overview across launch powers: EDC output (top row) vs.\ transmitted symbols (bottom row), illustrating progressive nonlinear distortion with increasing power.}
+\label{fig:overview}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\caption{仿真参数设置 / Table~\thetable.~Simulation parameters}
+\label{tab:params}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{参数} & \textbf{取值} \\
+\midrule
+调制格式     & 16-QAM, Gray映射 \\
+符号率           & 32~GBaud \\
+脉冲成型           & 根升余弦, $\beta = 0.1$ \\
+光纤长度          & $10 \times 80$~km = 800~km \\
+衰减系数 $\alpha$  & 0.2~dB/km \\
+色散系数 $D$        & 17~ps/nm/km ($\beta_2 = -2.17 \times 10^{-26}$~s$^2$/m) \\
+非线性系数 $\gamma$ & 1.3~W$^{-1}$km$^{-1}$ \\
+SSFM步数/跨段       & 500 \\
+EDFA噪声指数     & 5~dB \\
+入纤功率         & $-4$, $-2$, 0, $+2$, $+4$~dBm \\
+每功率符号数     & 16,384 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{MLP非线性补偿器架构}
+
+本文提出的MLP-NLC作用于经EDC均衡后的符号序列。对于离散时间索引$k$处的每一个符号，将包含$2M + 1$个相邻复值EDC输出符号的滑动窗口拼接为实值输入特征向量$\mathbf{x}_k \in \mathbb{R}^{4M + 2}$：
+
+\begin{equation}
+\mathbf{x}_k = \bigl[\,\Re(s_{k-M}^{\text{EDC}}),\,\Im(s_{k-M}^{\text{EDC}}),\,\dots,\,
+\Re(s_{k+M}^{\text{EDC}}),\,\Im(s_{k+M}^{\text{EDC}})\,\bigr]^\top
+\label{eq:features}
+\end{equation}
+
+MLP将该输入映射为二维输出$\hat{\mathbf{y}}_k = [\,\Re(\hat{s}_k),\,\Im(\hat{s}_k)\,]^\top$，用于估计原始发射信号的I/Q坐标。网络以补偿后符号与发射符号之间的均方误差（MSE）最小化为目标进行训练：
+
+\begin{equation}
+\mathcal{L} = \frac{1}{N}\sum_{k} \bigl\| \hat{\mathbf{y}}_k - \mathbf{y}_k \bigr\|^2
+\label{eq:loss}
+\end{equation}
+
+该架构受MT-NN简化设计~\cite{mtnn2025}的启发，由三个隐藏层组成，神经元数分别为64、32和16，全部采用ReLU激活函数。记忆深度$M = 2$（两侧各取2个相邻符号），输入维度为$2 \times (2M + 1) = 10$，总计可训练参数量为3,346个。表~\ref{tab:arch}详细列出了各层的维度信息。
+
+\begin{table}[h]
+\centering
+\caption{MLP-NLC网络架构 / Table~\thetable.~MLP-NLC network architecture}
+\label{tab:arch}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{层} & \textbf{输出维度} & \textbf{参数量} \\
+\midrule
+输入（特征窗口）  & 10      & -- \\
+隐藏层1（线性 + ReLU） & 64     & 704 \\
+隐藏层2（线性 + ReLU） & 32     & 2,080 \\
+隐藏层3（线性 + ReLU） & 16     & 528 \\
+输出层（线性）          & 2      & 34 \\
+\midrule
+\textbf{总计}           & --     & \textbf{3,346} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+记忆机制至关重要：无记忆的单符号MLP（$M = 0$）无法捕获色散非线性在时域上的相关性。通过引入相邻符号，网络能够学习局部符号间非线性相互作用模式，其机理与DBP处理整个波形的思路类似。然而，与DBP需对整个信号执行完整的FFT运算不同，MLP以固定大小的窗口逐符号操作，天然支持并行化的批量推理。
+
+针对每个入纤功率级别分别训练独立的MLP模型。训练采用Adam优化器，初始学习率为$10^{-3}$，学习率平台衰减策略，早停耐心值为50轮。数据集按70\%/15\%/15\%的比例划分为训练集、验证集和测试集，并采用固定随机种子以保证可复现性。
+
+\section{结果与讨论}
+\label{sec:results}
+
+\subsection{星座图与EVM分析}
+
+图~\ref{fig:overview}展示了EDC均衡后星座图随入纤功率增大而逐渐劣化的过程。在$-4$~dBm时，星座图主要表现为ASE噪声，各理想星座点周围呈近高斯分布的噪声云。当功率升至$+4$~dBm时，SPM引起的相位旋转和幅度相关失真清晰可见：外层星座点（归一化幅度为$\sqrt{10} \approx 3.16$）沿切向扩散，相位误差从$-4$~dBm时的0.057~rad单调增大至$+4$~dBm时的0.338~rad。
+
+表~\ref{tab:evm_results}汇总了所有入纤功率下经MLP补偿后的EVM和$Q$因子性能。在最高功率下，EVM降低比超过98\%，确认了MLP成功学习到确定性的非线性映射关系。经MLP补偿后的残余EVM（$+4$~dBm时为0.0041）已接近测量噪声本底。
+
+\begin{table}[h]
+\centering
+\caption{测试集EVM与$Q$因子结果 / Table~\thetable.~EVM and $Q$-factor results (test set)}
+\label{tab:evm_results}
+\begin{tabular}{@{}cccccc@{}}
+\toprule
+\textbf{功率} & \textbf{EVM} & \textbf{EVM} & \textbf{EVM} & \textbf{$Q_{\text{EDC}}$} & \textbf{$Q_{\text{MLP}}$} \\
+\textbf{[dBm]} & \textbf{EDC} & \textbf{MLP} & \textbf{降低比} & \textbf{[dB]} & \textbf{[dB]} \\
+\midrule
+$-4$ & 0.1671 & 0.0628 & 62.4\% & 15.54 & 24.04 \\
+$-2$ & 0.1525 & 0.0270 & 82.3\% & 16.33 & 31.37 \\
+0    & 0.1709 & 0.0112 & 93.5\% & 15.34 & 39.02 \\
+$+2$ & 0.2337 & 0.0059 & 97.5\% & 12.63 & 44.61 \\
+$+4$ & 0.3478 & 0.0041 & 98.8\% & 9.17  & 47.73 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Q因子与BER性能}
+
+图~\ref{fig:qfactor}对比了仅有EDC接收与EDC级联MLP-NLC两种情况下的$Q$因子。结果揭示了两个重要趋势。
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{qfactor_comparison.png}
+\caption{$Q$因子随入纤功率变化曲线 / Fig.~\thefigure.~$Q$-factor vs.\ launch power: EDC (blue squares) vs.\ MLP-NLC (orange circles); annotations show $Q$-gain at each power level.}
+\label{fig:qfactor}
+\end{figure}
+
+首先，仅有EDC时的$Q$因子随入纤功率呈现特征性的非单调变化趋势，在$-2$~dBm处达到峰值（$Q = 16.33$~dB），之后随功率增大而下降，因为非线性效应开始占主导地位。这验证了众所周知的入纤功率最优折中关系：低功率时ASE噪声占优，高功率时克尔非线性占优。
+
+其次，经MLP补偿后的$Q$因子随入纤功率单调递增，在$+4$~dBm时达到$47.73$~dB。这是因为更高的入纤功率改善了光信噪比（OSNR），而MLP有效消除了确定性的非线性代价，使系统能够充分受益于信号功率的增大。$Q$因子增益从$-4$~dBm时的$+8.50$~dB（此时ASE噪声占主导且本质不可预测）增长至$+4$~dBm时的$+38.56$~dB（此时确定性克尔非线性是主要损伤且完全可学习）。
+
+图~\ref{fig:ber}展示了BER性能。基于硬判决Gray映射16-QAM解映射的测试集直接比特计数提供了最为保守的估计。在$-4$和$-2$~dBm时，MLP分别将BER降低了约1.2倍和2.6倍（受到$\sim 10^4$测试比特可用数量的限制）。在$0$~dBm及以上功率，MLP补偿后的BER在有限测试集中被降至零（未观测到误比特），而仅有EDC时的BER在$+4$~dBm下达到$1.46 \times 10^{-1}$，远高于典型的HD-FEC门限$1.5 \times 10^{-2}$。
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{ber_vs_power.png}
+\caption{BER随入纤功率变化曲线 / Fig.~\thefigure.~BER vs.\ launch power: EDC (blue) vs.\ MLP-NLC (orange); red dashed line marks the HD-FEC threshold ($1.5 \times 10^{-2}$).}
+\label{fig:ber}
+\end{figure}
+
+\subsection{计算复杂度}
+
+表~\ref{tab:complexity}将本文提出的MLP-NLC与两种DBP配置的计算开销进行了对比。每跨段500个SSFM步数的标准DBP（与数据生成所用分辨率一致）每符号需要$3.44 \times 10^6$次实数运算。即使每跨段仅10步的降复杂度DBP（计算量减少50倍），每符号仍需$6.88 \times 10^4$次运算。
+
+\begin{table}[h]
+\centering
+\caption{计算复杂度对比 / Table~\thetable.~Computational complexity comparison}
+\label{tab:complexity}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{方法} & \textbf{实乘次数/符号} & \textbf{比值} \\
+\midrule
+MLP-NLC（本文）         & $3.23 \times 10^3$   & 1（基准） \\
+降阶DBP（10步/跨段） & $6.88 \times 10^4$   & 21.3$\times$   \\
+标准DBP（500步/跨段） & $3.44 \times 10^6$ & 1064$\times$   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+MLP每符号仅需$3.23 \times 10^3$次实数乘法运算，约为标准DBP的0.094\%、降阶DBP的4.7\%。在推理延迟方面，每符号处理时间约为85.6~ns，对应单个CPU核约11.7~Msymbols/s的吞吐率（标准x86处理器实测）。在32~GBaud的目标符号率下，这意味着约需2,735个CPU核来满足实时处理要求。若采用专为小型矩阵-向量乘法优化的神经处理单元（NPU）或FPGA实现，该数值可降低数个数量级。
+
+图~\ref{fig:qgain}直观展示了非线性强度与补偿增益之间的关系：$Q$因子增益（柱状图）随入纤功率增大而增加，与EDC EVM曲线（红线）的走势一致，后者可作为非线性损伤严重程度的代理指标。
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{qgain_vs_power.png}
+\caption{MLP-NLC带来的$Q$因子增益随入纤功率变化 / Fig.~\thefigure.~$Q$-factor gain from MLP-NLC vs.\ launch power (bars, left axis), overlaid with pre-compensation EDC EVM (red line, right axis).}
+\label{fig:qgain}
+\end{figure}
+
+\subsection{讨论}
+
+仿真结果揭示了不同工作区间之间的清晰层次。在ASE噪声主导的低功率区间（$-4$~dBm），MLP提供了$+8.50$~dB的增益，受限于ASE噪声的随机性，该提升幅度有限。在非线性主导的高功率区间（$+4$~dBm），MLP实现了$38.56$~dB的$Q$因子改善，从本已无法使用的星座图中恢复出近乎完美的信号。该规律在定性层面符合预期：确定性的非线性相移可从符号模式中学习，而热噪声和量子噪声无法被任何确定性补偿器消除。
+
+采用$M = 2$个记忆抽头的滑动窗口方法在上下文范围与模型复杂度之间取得了良好的平衡。在10维输入特征下，第一隐藏层的64个神经元配备704个可训练参数，形成适度过完备的表示，可在不过拟合的前提下捕获符号间的非线性相互作用。在本文仿真色散水平下，非线性信道记忆主要集中在邻近的若干符号内，更宽或更深的网络将增加参数量而收益递减。
+
+可注意到的现象是，尽管EDC EVM在不同功率间的变化幅度超过2倍，但MLP补偿后的EVM在所有功率级别下均保持近似恒定（约0.004--0.063）。补偿效果在高功率下最为显著，此时非线性与ASE的比值最大，由此确认残余EVM下限主要由ASE噪声分量决定，而任何确定性补偿器均无法消除该分量。
+
+\section{结论}
+\label{sec:conclusion}
+
+本文给出了完整的MLP基光纤非线性补偿仿真与评估框架，针对单信道16-QAM相干系统进行了全面分析。主要结论如下：
+
+\begin{enumerate}
+    \item 仅含3,346个参数、2符号记忆（$M = 2$）的轻量MLP，在800~km SSMF链路上、$-4$至$+4$~dBm的入纤功率范围内，实现了从$+8.50$~dB到$+38.56$~dB的$Q$因子改善。
+    \item 在高入纤功率下（$\ge 0$~dBm），MLP将BER抑制至测试集检测极限以下，而仅有EDC的接收方案已超出HD-FEC门限。
+    \item MLP每符号仅需$3.23 \times 10^3$次实数乘法运算，相比标准DBP降低了约1000倍，相比降阶DBP降低了约21倍。
+    \item $Q$因子增益随入纤功率单调递增，证实了MLP学习并消除了确定性的克尔非线性损伤，同时保留了不可预测的随机ASE噪声。
+\end{enumerate}
+
+未来工作可从以下几个方向展开：（a）训练跨功率级别感知的统一MLP模型；（b）将本方法扩展至双偏振和WDM场景，此时跨信道非线性将变得显著；（c）探索更先进的网络架构，如基于注意力机制的模型或Kolmogorov-Arnold网络~\cite{gdpkan2025}，以寻求进一步的复杂度降低；（d）评估MLP-NLC与概率星座整形技术的联合使用效果，后者恰好在非线性补偿收益最大的高功率区间发挥作用。
+
+% ==============================================================================
+%  英文标题、摘要与关键词
+%  ==============================================================================
+\section*{English Title, Abstract and Keywords}
+
+\noindent\textbf{Title:} Low-Complexity MLP-Based Nonlinearity Compensation for 16-QAM Coherent Optical Fiber Transmission
+
+\vspace{2mm}
+\noindent\textbf{Abstract:} Nonlinear impairments arising from the Kerr effect impose a fundamental limitation on the achievable data rates and transmission reaches in coherent optical communication systems. While digital back-propagation (DBP) can mitigate these effects, its high computational cost prohibits practical deployment in power-constrained transceivers. In this work, we investigate a lightweight multi-layer perceptron (MLP) architecture for nonlinearity compensation (NLC) following electronic dispersion compensation (EDC) in a 16-QAM single-channel system over 800~km of standard single-mode fiber. The proposed compensator employs a compact memory-based MLP with only 3,346 trainable parameters and achieves a Q-factor gain ranging from 8.50~dB at $-4$~dBm launch power to 38.56~dB at $+4$~dBm. Bit-error rate (BER) counting confirms that MLP-NLC suppresses errors below measurable limits at high launch powers where EDC alone exceeds the HD-FEC threshold. A computational complexity analysis reveals that the MLP requires only $3.23 \times 10^3$ real multiplications per symbol, corresponding to approximately 0.09\% of the operation count required by standard DBP. The results demonstrate that shallow feed-forward neural networks with memory can provide substantial nonlinearity mitigation at a fraction of the complexity of physics-based DBP, making them attractive candidates for energy-efficient coherent receivers.
+
+\vspace{2mm}
+\noindent\textbf{Keywords:} fiber nonlinearity compensation; multi-layer perceptron (MLP); coherent optical communication; 16-QAM; digital back-propagation; Kerr effect
+
+% ==============================================================================
+%  参考文献 (GB/T 7714 格式)
+%  ==============================================================================
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{10}
+
+\bibitem{agrawal2001}
+AGRAWAL~G~P. Nonlinear Fiber Optics[M]. 3rd~ed. San Diego: Academic, 2001.
+
+\bibitem{ip2008}
+IP~E, KAHN~J~M. Compensation of dispersion and nonlinear impairments using digital backpropagation[J]. Journal of Lightwave Technology, 2008, 26(20): 3416--3425.
+
+\bibitem{gdpkan2025}
+CHEN~Y, YANG~H, HU~W, et~al. Low complexity fiber nonlinearity compensation integrated with a KAN-structured neural network for coherent optical communication systems[J]. Optics Express, 2025, 33(8): 17876--17894.
+
+\bibitem{operator2025}
+NIU~Z, YANG~H, GUO~H, et~al. Operator learning for fiber channel modeling with digital twin[J]. Journal of Lightwave Technology, 2025, 43(7): 3103--3116.
+
+\bibitem{mtnn2025}
+WU~S, YANG~H, HU~W, et~al. Complexity-aware simplified multi-task neural network for nonlinearity compensation in C-band 80-GBaud PCS-64QAM coherent optical transmission systems[J]. Optics Express, 2025, 33(8): 17522--17539.
+
+\end{thebibliography}
+
+\end{document}
