@@ -114,6 +114,7 @@
 | B4. 性能评估 | BER 曲线、Q-factor 对比、复杂度分析 | ✅ 完成 | `eval_performance_b4.py`, `b4_summary.csv`, 4 张评估图 |
 | C. 写作排版 | LaTeX 论文撰写与编译 | ✅ 完成 | `paper.tex`, `paper.pdf` (5 页, IEEE 格式) |
 | 文档 | 全流程 SOP (仿真→训练→评估) | ✅ 完成 | `MLP_NLC_Pipeline_SOP.md` (20 KB, 含 16 个踩坑记录) |
+| D. 中文论文 | xelatex + xeCJK 中文学术论文排版 | ✅ 完成 | `paper_zh_v3.tex`, `paper_zh_v3.pdf`, `PAPER_ZH_SOP.md` |
 
 ### 待完成
 
