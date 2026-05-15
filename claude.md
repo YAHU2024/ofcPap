@@ -97,7 +97,7 @@
 
 ## 10. 项目进度追踪
 
-> 最后更新: 2026-05-13
+> 最后更新: 2026-05-15
 
 ### 已完成
 
@@ -109,7 +109,8 @@
 | B2. 验证绘图 | 星座图对比（EDC vs TX） | ✅ 完成 | `initial_test.png`, `power_sweep_overview.png` |
 | B3. MLP 补偿器 | 轻量 MLP 非线性补偿器训练 | ✅ 完成 | `train_mlp_nlc.py`, `mlp_nlc_model.pt` |
 | B3. 结果评估 | EVM / Q-factor / BER / 星座图 | ✅ 完成 | `mlp_results.csv`, 6 张评估图 |
-| 工程化 | Git 管理 + SOP 文档 | ✅ 完成 | `SSFM_SOP.md`, 已推送至 `git@github.com:YAHU2024/ofcPap.git` |
+| B3. SOP 文档 | MLP 补偿器开发 SOP | ✅ 完成 | `MLP_NLC_SOP.md` |
+| 工程化 | Git 管理 + SSFM SOP 文档 | ✅ 完成 | `SSFM_SOP.md`, 已推送至 `git@github.com:YAHU2024/ofcPap.git` |
 | B4. 性能评估 | BER 曲线、Q-factor 对比、复杂度分析 | ✅ 完成 | `eval_performance_b4.py`, `b4_summary.csv`, 4 张评估图 |
 | C. 写作排版 | LaTeX 论文撰写与编译 | ✅ 完成 | `paper.tex`, `paper.pdf` (5 页, IEEE 格式) |
 
