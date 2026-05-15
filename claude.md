@@ -113,6 +113,7 @@
 | 工程化 | Git 管理 + SSFM SOP 文档 | ✅ 完成 | `SSFM_SOP.md`, 已推送至 `git@github.com:YAHU2024/ofcPap.git` |
 | B4. 性能评估 | BER 曲线、Q-factor 对比、复杂度分析 | ✅ 完成 | `eval_performance_b4.py`, `b4_summary.csv`, 4 张评估图 |
 | C. 写作排版 | LaTeX 论文撰写与编译 | ✅ 完成 | `paper.tex`, `paper.pdf` (5 页, IEEE 格式) |
+| 文档 | 全流程 SOP (仿真→训练→评估) | ✅ 完成 | `MLP_NLC_Pipeline_SOP.md` (20 KB, 含 16 个踩坑记录) |
 
 ### 待完成
 
